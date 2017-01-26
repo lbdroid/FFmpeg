@@ -109,6 +109,7 @@ int do_benchmark_all  = 0;
 int do_hex_dump       = 0;
 int do_pkt_dump       = 0;
 int copy_ts           = 0;
+int regen_ts          = 0;
 int start_at_zero     = 0;
 int copy_tb           = -1;
 int debug_ts          = 0;
@@ -3426,6 +3427,8 @@ const OptionDef options[] = {
         "audio drift threshold", "threshold" },
     { "copyts",         OPT_BOOL | OPT_EXPERT,                       { &copy_ts },
         "copy timestamps" },
+    { "regents",        OPT_BOOL | OPT_EXPERT,                       { &regen_ts },
+        "force timestamp regeneration in output stream, suitable for stream capturing only" },
     { "start_at_zero",  OPT_BOOL | OPT_EXPERT,                       { &start_at_zero },
         "shift input timestamps to start at 0 when using copyts" },
     { "copytb",         HAS_ARG | OPT_INT | OPT_EXPERT,              { &copy_tb },

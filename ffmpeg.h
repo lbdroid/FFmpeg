@@ -582,6 +582,7 @@ extern int do_deinterlace;
 extern int do_hex_dump;
 extern int do_pkt_dump;
 extern int copy_ts;
+extern int regen_ts;
 extern int start_at_zero;
 extern int copy_tb;
 extern int debug_ts;

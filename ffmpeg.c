@@ -133,6 +133,7 @@ static int64_t decode_error_stat[2];
 static int want_sdp = 1;
 
 static int current_time;
+static int64_t time_start;
 AVIOContext *progress_avio = NULL;
 
 static uint8_t *subtitle_out;
@@ -730,22 +731,36 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost)
             pkt->dts != AV_NOPTS_VALUE &&
             !(st->codecpar->codec_id == AV_CODEC_ID_VP9 && ost->stream_copy) &&
             ost->last_mux_dts != AV_NOPTS_VALUE) {
-            int64_t max = ost->last_mux_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
-            if (pkt->dts < max) {
-                int loglevel = max - pkt->dts > 2 || st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO ? AV_LOG_WARNING : AV_LOG_DEBUG;
-                av_log(s, loglevel, "Non-monotonous DTS in output stream "
-                       "%d:%d; previous: %"PRId64", current: %"PRId64"; ",
-                       ost->file_index, ost->st->index, ost->last_mux_dts, pkt->dts);
-                if (exit_on_error) {
-                    av_log(NULL, AV_LOG_FATAL, "aborting.\n");
-                    exit_program(1);
-                }
-                av_log(s, loglevel, "changing to %"PRId64". This may result "
-                       "in incorrect timestamps in the output file.\n",
-                       max);
-                if (pkt->pts >= pkt->dts)
-                    pkt->pts = FFMAX(pkt->pts, max);
+            int64_t max;
+            if (regen_ts){
+                max = ((av_gettime_relative() - time_start) / 1000000000.0) * AV_TIME_BASE;
+                // av_gettime_relative() doesn't seem to do the job adequately. Sometimes (fairly frequent)
+                // above line results in the same timestamp back to back, possibly multiple frames arriving
+                // at ffmpeg in too short of a time. In any case, we can generally assume that the result of
+                // av_gettime_relative() will never go backwards, and that it won't report on a time until
+                // that time has actually come, which means that if subsequent frames end up with duplicate
+                // timestamps, we can just nudge them forward by close to the expected amount.
+                if (max <= ost->last_mux_dts) max = ost->last_mux_dts + (pkt->duration * 0.9);
                 pkt->dts = max;
+                pkt->pts = max;
+            } else {
+                max = ost->last_mux_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
+                if (pkt->dts < max) {
+                    int loglevel = max - pkt->dts > 2 || st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO ? AV_LOG_WARNING : AV_LOG_DEBUG;
+                    av_log(s, loglevel, "Non-monotonous DTS in output stream "
+                           "%d:%d; previous: %"PRId64", current: %"PRId64"; ",
+                           ost->file_index, ost->st->index, ost->last_mux_dts, pkt->dts);
+                    if (exit_on_error) {
+                        av_log(NULL, AV_LOG_FATAL, "aborting.\n");
+                        exit_program(1);
+                    }
+                    av_log(s, loglevel, "changing to %"PRId64". This may result "
+                           "in incorrect timestamps in the output file.\n",
+                           max);
+                    if (pkt->pts >= pkt->dts)
+                        pkt->pts = FFMAX(pkt->pts, max);
+                    pkt->dts = max;
+                }
             }
         }
     }
@@ -4214,16 +4229,22 @@ static int process_input(int file_index)
         } else {
             if ( delta < -1LL*dts_error_threshold*AV_TIME_BASE ||
                  delta >  1LL*dts_error_threshold*AV_TIME_BASE) {
-                av_log(NULL, AV_LOG_WARNING, "DTS %"PRId64", next:%"PRId64" st:%d invalid dropping\n", pkt.dts, ist->next_dts, pkt.stream_index);
-                pkt.dts = AV_NOPTS_VALUE;
+                if (regen_ts) pkt_dts = dts_error_threshold*AV_TIME_BASE/2;
+                else {
+                  av_log(NULL, AV_LOG_WARNING, "DTS %"PRId64", next:%"PRId64" st:%d invalid dropping\n", pkt.dts, ist->next_dts, pkt.stream_index);
+                  pkt.dts = AV_NOPTS_VALUE;
+                }
             }
             if (pkt.pts != AV_NOPTS_VALUE){
                 int64_t pkt_pts = av_rescale_q(pkt.pts, ist->st->time_base, AV_TIME_BASE_Q);
                 delta   = pkt_pts - ist->next_dts;
                 if ( delta < -1LL*dts_error_threshold*AV_TIME_BASE ||
                      delta >  1LL*dts_error_threshold*AV_TIME_BASE) {
-                    av_log(NULL, AV_LOG_WARNING, "PTS %"PRId64", next:%"PRId64" invalid dropping st:%d\n", pkt.pts, ist->next_dts, pkt.stream_index);
-                    pkt.pts = AV_NOPTS_VALUE;
+                    if (regen_ts) pkt_dts = dts_error_threshold*AV_TIME_BASE/2;
+                    else {
+                      av_log(NULL, AV_LOG_WARNING, "PTS %"PRId64", next:%"PRId64" invalid dropping st:%d\n", pkt.pts, ist->next_dts, pkt.stream_index);
+                      pkt.pts = AV_NOPTS_VALUE;
+                    }
                 }
             }
         }
@@ -4365,6 +4386,7 @@ static int transcode(void)
     }
 
     timer_start = av_gettime_relative();
+    time_start = timer_start;
 
 #if HAVE_PTHREADS
     if ((ret = init_input_threads()) < 0)
