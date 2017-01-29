@@ -18,6 +18,13 @@
 
 #include "v4l2-common.h"
 
+#ifndef V4L2_PIX_FMT_H264
+#define V4L2_PIX_FMT_H264     v4l2_fourcc('H', '2', '6', '4') /* H264 with start codes */
+#endif
+#ifndef V4L2_PIX_FMT_MPEX4
+#define V4L2_PIX_FMT_MPEG4    v4l2_fourcc('M', 'P', 'G', '4') /* MPEG-4 part 2 ES */
+#endif
+
 const struct fmt_map ff_fmt_conversion_table[] = {
     //ff_fmt              codec_id              v4l2_fmt
     { AV_PIX_FMT_YUV420P, AV_CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV420  },
