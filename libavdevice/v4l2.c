@@ -239,7 +239,6 @@ static int first_field(const struct video_data *s)
     return 1;
 }
 
-#if HAVE_STRUCT_V4L2_FRMIVALENUM_DISCRETE
 static void list_framesizes(AVFormatContext *ctx, uint32_t pixelformat)
 {
     const struct video_data *s = ctx->priv_data;
@@ -264,7 +263,6 @@ static void list_framesizes(AVFormatContext *ctx, uint32_t pixelformat)
         vfse.index++;
     }
 }
-#endif
 
 static void list_formats(AVFormatContext *ctx, int type)
 {
@@ -297,9 +295,7 @@ static void list_formats(AVFormatContext *ctx, int type)
         if (vfd.flags & V4L2_FMT_FLAG_EMULATED)
             av_log(ctx, AV_LOG_INFO, " Emulated :");
 #endif
-#if HAVE_STRUCT_V4L2_FRMIVALENUM_DISCRETE
         list_framesizes(ctx, vfd.pixelformat);
-#endif
         av_log(ctx, AV_LOG_INFO, "\n");
     }
 }
